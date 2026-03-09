@@ -1,0 +1,7 @@
+{
+  "model": "/scratch/azureml/yz/model/Qwen3-8B",
+  "n_total": 0,
+  "n_correct": 0,
+  "n_wrong": 0,
+  "weak_eval_from_inferred_first_error": {}
+}

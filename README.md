@@ -62,6 +62,14 @@ python basd_pilot/run_formal_experiment.py \
   --top_p 0.95 \
   --max_new_tokens 1024 \
   --limit 20
+
+python basd_pilot/run_formal_experiment.py \
+  --input data/gsm8k_test_full.jsonl \
+  --out_dir outputs/formal_gsm8k_qwen3_8b_debug \
+  --model_name /scratch/azureml/yz/model/Qwen3-8B \
+  --temperature 0 \
+  --max_new_tokens 256 \
+  --limit 20
 ```
 
 - `--limit 0` 表示跑完整数据集。
