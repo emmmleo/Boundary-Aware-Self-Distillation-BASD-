@@ -18,6 +18,26 @@ pip install -U transformers datasets torch matplotlib accelerate
 
 ---
 
+## 1.5) 下载 Qwen3-8B 到本地（可选）
+
+如果你希望先把模型下载到本地再运行实验，可以执行：
+
+```bash
+pip install -U huggingface_hub
+python download_qwen3_8b.py --local-dir models/Qwen3-8B
+```
+
+如果使用国内镜像，可先设置：
+
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+python download_qwen3_8b.py --local-dir models/Qwen3-8B
+```
+
+下载后运行实验时，将 `--model_name` 改为本地目录即可（例如 `models/Qwen3-8B`）。
+
+---
+
 ## 2) 准备完整数据集（GSM8K 全量 test）
 
 ```bash
