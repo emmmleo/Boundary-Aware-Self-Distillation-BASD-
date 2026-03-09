@@ -1,0 +1,14 @@
+{
+  "model": "/scratch/azureml/yz/model/Qwen3-8B",
+  "n_total": 17,
+  "n_correct": 10,
+  "n_wrong": 7,
+  "weak_eval_from_inferred_first_error": {
+    "n": 7,
+    "exact_match": 0.2857142857142857,
+    "hit_at_1": 0.42857142857142855,
+    "mae": 1.5714285714285714,
+    "jump_better_or_equal_ratio": 0.5714285714285714
+  },
+  "skipped_debug_file": "outputs/formal_gsm8k_qwen3_8b_slow_verify/skipped_debug.jsonl"
+}
