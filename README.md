@@ -70,6 +70,14 @@ python basd_pilot/run_formal_experiment.py \
   --temperature 0 \
   --max_new_tokens 2048 \
   --limit 20
+
+torchrun --nproc_per_node=8 basd_pilot/run_formal_experiment.py \
+  --input data/gsm8k_test_full.jsonl \
+  --out_dir outputs/formal_gsm8k_qwen3_8b_fast \
+  --model_name /scratch/azureml/yz/model/Qwen3-8B \
+  --temperature 0.0 \
+  --max_new_tokens 1024 \
+  --limit 24
 ```
 
 - `--limit 0` 表示跑完整数据集。
