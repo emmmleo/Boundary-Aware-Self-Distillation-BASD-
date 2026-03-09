@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""Debugged formal BASD experiment pipeline.
+"""More robust BASD formal experiment pipeline.
 
-Key fixes:
-1. Use chat-template aligned prompts for both generation and scoring.
-2. Stop generation on common prompt-leak markers.
-3. Sanitize student output before parsing steps / final answer.
-4. Use stronger final-answer normalization.
-5. Replace exact-text first-error heuristic with a numeric heuristic.
-6. Add progress logging.
-7. Use KV cache for token-wise KL scoring to avoid apparent hangs.
+Fixes over v1:
+1. Parse both English/Chinese step labels and fullwidth colon.
+2. Strip <think> tags and normalize common formatting variants.
+3. Add fallback conversion for numbered lists like `1. ...` / `1) ...`.
+4. Force output to use exact English labels Step N / Final Answer.
+5. Save raw generated outputs for skipped samples to debug parsing failures.
 """
 
 import argparse
@@ -23,15 +21,19 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, StoppingCriteria, StoppingCriteriaList
 
 STEP_RE = re.compile(
-    r"(?:^|\n)Step\s*(\d+)\s*:\s*(.*?)(?=(?:\nStep\s*\d+\s*:)|(?:\nFinal\s*Answer\s*:)|\Z)",
+    r"(?:^|\n)(?:Step|步骤)\s*(\d+)\s*[:：]\s*(.*?)(?=(?:\n(?:Step|步骤)\s*\d+\s*[:：])|(?:\n(?:Final\s*Answer|最终答案)\s*[:：])|\Z)",
     re.S | re.I,
 )
-FINAL_RE = re.compile(r"Final\s*Answer\s*:\s*(.+?)(?:\n|\Z)", re.I | re.S)
+FINAL_RE = re.compile(r"(?:Final\s*Answer|最终答案)\s*[:：]\s*(.+?)(?:\n|\Z)", re.I | re.S)
 NUM_RE = re.compile(r"-?\d+(?:,\d{3})*(?:\.\d+)?(?:/\d+(?:\.\d+)?)?%?")
+THINK_RE = re.compile(r"<think>.*?</think>", re.S | re.I)
+NUMBERED_LINE_RE = re.compile(r"(?:^|\n)\s*(\d+)\s*[\.)、]\s*(.+?)(?=(?:\n\s*\d+\s*[\.)、])|(?:\n(?:Final\s*Answer|最终答案)\s*[:：])|\Z)", re.S)
 
 STUDENT_SYSTEM = (
     "你是一个严谨的数学推理助手。"
-    "严格按照用户要求的格式输出，并在给出 Final Answer 后立即停止，不要继续写新的题目、角色标签或解释。"
+    "必须严格使用英文标签 `Step 1:`, `Step 2:` ... 和 `Final Answer:` 输出。"
+    "不要使用 `步骤1：`、不要输出 <think> 标签、不要输出角色名、不要续写下一题。"
+    "在给出 `Final Answer:` 后立即停止。"
 )
 TEACHER_SYSTEM_TEMPLATE = (
     "你是教师模型。你知道题目的参考解，并需要对学生当前解答前缀的下一 token 概率分布进行评估。"
@@ -40,7 +42,7 @@ TEACHER_SYSTEM_TEMPLATE = (
 )
 
 STUDENT_FORMAT_PROMPT = (
-    "请严格按照以下格式解题：\n"
+    "请严格按照以下格式解题，只能使用英文标签：\n"
     "Step 1: ...\n"
     "Step 2: ...\n"
     "Step 3: ...\n"
@@ -91,21 +93,48 @@ def build_user_text(question: str) -> str:
     return f"{STUDENT_FORMAT_PROMPT}\n\n题目：{question}\n请开始解题。"
 
 
+def normalize_text(text: str) -> str:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("：", ":")
+    text = text.replace("步骤", "Step ")
+    text = THINK_RE.sub("", text)
+    return text
+
+
+def convert_numbered_list_to_steps(text: str) -> str:
+    if re.search(r"(?:^|\n)Step\s*\d+\s*:", text, flags=re.I):
+        return text
+    matches = list(NUMBERED_LINE_RE.finditer(text))
+    if not matches:
+        return text
+    parts = []
+    for m in matches:
+        idx = int(m.group(1))
+        body = m.group(2).strip()
+        parts.append(f"Step {idx}: {body}")
+    if FINAL_RE.search(text):
+        final = FINAL_RE.search(text).group(0).strip()
+        parts.append(final)
+    return "\n".join(parts)
+
+
 def sanitize_student_solution(text: str) -> str:
-    text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+    text = normalize_text(text).strip()
 
     for marker in STOP_STRINGS:
         if marker in text:
             text = text.split(marker)[0]
 
-    m = re.search(r"(Step\s*1\s*:.*)", text, flags=re.S | re.I)
+    # Keep content starting from first recognizable reasoning marker if present.
+    m = re.search(r"((?:Step\s*1\s*:)|(?:1\s*[\.)、]))", text, flags=re.I)
     if m:
-        text = m.group(1)
+        text = text[m.start() :]
+
+    text = convert_numbered_list_to_steps(text)
 
     fm = FINAL_RE.search(text)
     if fm:
-        end = fm.end()
-        text = text[:end]
+        text = text[: fm.end()]
 
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
     return text
@@ -128,7 +157,7 @@ def extract_final_answer(text: str) -> str:
 
 
 def normalize_answer(ans: str) -> str:
-    ans = ans.strip()
+    ans = normalize_text(ans).strip()
     ans = ans.replace("\\boxed{", "").replace("}", "")
     ans = ans.replace(",", "").replace("$", "")
     nums = NUM_RE.findall(ans)
@@ -239,13 +268,7 @@ def compute_step_kl_curve(model, tokenizer, question: str, reference_solution: s
             teacher_logits, teacher_past = advance_one_token(model, tok_id, teacher_past)
             student_logits, student_past = advance_one_token(model, tok_id, student_past)
 
-        curve.append(
-            {
-                "step": sid,
-                "kl": float(sum(token_kls) / len(token_kls)),
-                "token_count": len(step_token_ids),
-            }
-        )
+        curve.append({"step": sid, "kl": float(sum(token_kls) / len(token_kls)), "token_count": len(step_token_ids)})
         accumulated += f"Step {sid}: {stext}\n"
     return curve
 
@@ -272,7 +295,6 @@ def infer_first_error(reference_solution: str, student_solution: str) -> Optiona
     ss = parse_steps(student_solution)
     if not ss:
         return None
-
     for (ri, rt), (si, st) in zip(rs, ss):
         if ri != si:
             return si
@@ -280,7 +302,6 @@ def infer_first_error(reference_solution: str, student_solution: str) -> Optiona
         snum = last_numeric_token(st)
         if rnum is not None and snum is not None and normalize_answer(rnum) != normalize_answer(snum):
             return si
-
     ref_final = normalize_answer(extract_final_answer(reference_solution))
     stu_final = normalize_answer(extract_final_answer(student_solution))
     if stu_final != ref_final:
@@ -316,13 +337,7 @@ def evaluate(rows: List[Dict]) -> Dict:
         abs(r["boundary_step_jump"] - r["manual_first_error_step"]) <= abs(r["boundary_step_max_abs_kl"] - r["manual_first_error_step"])
         for r in labeled
     ) / len(labeled)
-    return {
-        "n": len(labeled),
-        "exact_match": exact,
-        "hit_at_1": hit1,
-        "mae": mae,
-        "jump_better_or_equal_ratio": jump_better,
-    }
+    return {"n": len(labeled), "exact_match": exact, "hit_at_1": hit1, "mae": mae, "jump_better_or_equal_ratio": jump_better}
 
 
 def save_annotation_csv(path: str, rows: List[Dict]) -> None:
@@ -331,30 +346,36 @@ def save_annotation_csv(path: str, rows: List[Dict]) -> None:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
         for r in rows:
-            writer.writerow(
-                {
-                    "id": r["id"],
-                    "question": r["question"],
-                    "student_solution": r["student_solution"],
-                    "reference_solution": r["reference_solution"],
-                    "auto_boundary_step": r["boundary_step_jump"],
-                    "manual_first_error_step": r.get("manual_first_error_step", ""),
-                }
-            )
+            writer.writerow({
+                "id": r["id"],
+                "question": r["question"],
+                "student_solution": r["student_solution"],
+                "reference_solution": r["reference_solution"],
+                "auto_boundary_step": r["boundary_step_jump"],
+                "manual_first_error_step": r.get("manual_first_error_step", ""),
+            })
+
+
+def append_debug_jsonl(path: str, row: Dict) -> None:
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Debugged formal BASD pilot with Qwen3-8B + full dataset.")
+    parser = argparse.ArgumentParser(description="Robust BASD formal pilot with Qwen3-8B + full dataset.")
     parser.add_argument("--input", required=True, help="jsonl dataset path (full set)")
     parser.add_argument("--out_dir", default="outputs/formal")
     parser.add_argument("--model_name", default="Qwen/Qwen3-8B")
     parser.add_argument("--max_new_tokens", type=int, default=256)
-    parser.add_argument("--temperature", type=float, default=0.0, help="建议调试时用 0.0 做 greedy")
+    parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--top_p", type=float, default=0.95)
-    parser.add_argument("--limit", type=int, default=0, help="0 表示跑完整数据集")
+    parser.add_argument("--limit", type=int, default=0)
     args = parser.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
+    debug_skipped_path = os.path.join(args.out_dir, "skipped_debug.jsonl")
+    if os.path.exists(debug_skipped_path):
+        os.remove(debug_skipped_path)
 
     print("[1/4] loading tokenizer", flush=True)
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
@@ -379,10 +400,22 @@ def main() -> None:
     rows = []
     for idx, p in enumerate(problems, start=1):
         print(f"[{idx}/{len(problems)}] generating student solution: {p.sample_id}", flush=True)
-        student_solution = generate_student_solution(model, tokenizer, p.question, args.max_new_tokens, args.temperature, args.top_p)
+        raw_student_solution = generate_student_solution(model, tokenizer, p.question, args.max_new_tokens, args.temperature, args.top_p)
+        student_solution = sanitize_student_solution(raw_student_solution)
+        steps_preview = parse_steps(student_solution)
+        if idx <= 3:
+            print(f"[{idx}/{len(problems)}] preview solution: {student_solution[:300]!r}", flush=True)
+            print(f"[{idx}/{len(problems)}] parsed steps: {len(steps_preview)}", flush=True)
+
         print(f"[{idx}/{len(problems)}] scoring KL by step", flush=True)
         step_kls = compute_step_kl_curve(model, tokenizer, p.question, p.reference_solution, student_solution)
         if not step_kls:
+            append_debug_jsonl(debug_skipped_path, {
+                "id": p.sample_id,
+                "question": p.question,
+                "raw_student_solution": raw_student_solution,
+                "sanitized_student_solution": student_solution,
+            })
             print(f"[{idx}/{len(problems)}] skipped (no valid steps parsed)", flush=True)
             continue
 
@@ -391,20 +424,18 @@ def main() -> None:
         pred_final = normalize_answer(extract_final_answer(student_solution))
         is_correct = gt_final == pred_final
 
-        rows.append(
-            {
-                "id": p.sample_id,
-                "question": p.question,
-                "reference_solution": p.reference_solution,
-                "student_solution": student_solution,
-                "is_correct": is_correct,
-                "manual_first_error_step": None,
-                "inferred_first_error_step": infer_first_error(p.reference_solution, student_solution),
-                "boundary_step_jump": boundary_jump,
-                "boundary_step_max_abs_kl": boundary_abs,
-                "step_kls": step_kls,
-            }
-        )
+        rows.append({
+            "id": p.sample_id,
+            "question": p.question,
+            "reference_solution": p.reference_solution,
+            "student_solution": student_solution,
+            "is_correct": is_correct,
+            "manual_first_error_step": None,
+            "inferred_first_error_step": infer_first_error(p.reference_solution, student_solution),
+            "boundary_step_jump": boundary_jump,
+            "boundary_step_max_abs_kl": boundary_abs,
+            "step_kls": step_kls,
+        })
 
         if idx % 10 == 0 or idx == len(problems):
             write_jsonl(os.path.join(args.out_dir, "records.partial.jsonl"), rows)
@@ -419,6 +450,7 @@ def main() -> None:
         "n_correct": sum(r["is_correct"] for r in rows),
         "n_wrong": sum(not r["is_correct"] for r in rows),
         "weak_eval_from_inferred_first_error": evaluate(weak_rows),
+        "skipped_debug_file": debug_skipped_path,
     }
     with open(os.path.join(args.out_dir, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
