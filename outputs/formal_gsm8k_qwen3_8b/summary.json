@@ -1,0 +1,13 @@
+{
+  "model": "/scratch/azureml/yz/model/Qwen3-8B",
+  "n_total": 20,
+  "n_correct": 5,
+  "n_wrong": 15,
+  "weak_eval_from_inferred_first_error": {
+    "n": 20,
+    "exact_match": 0.4,
+    "hit_at_1": 0.5,
+    "mae": 1.4,
+    "jump_better_or_equal_ratio": 0.75
+  }
+}
