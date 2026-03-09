@@ -30,19 +30,22 @@ THINK_RE = re.compile(r"<think>.*?</think>", re.S | re.I)
 NUMBERED_LINE_RE = re.compile(r"(?:^|\n)\s*(\d+)\s*[\.)、]\s*(.+?)(?=(?:\n\s*\d+\s*[\.)、])|(?:\n(?:Final\s*Answer|最终答案)\s*[:：])|\Z)", re.S)
 
 STUDENT_SYSTEM = (
-    "你是一个严谨的数学推理助手。"
-    "必须严格使用英文标签 `Step 1:`, `Step 2:` ... 和 `Final Answer:` 输出。"
-    "不要使用 `步骤1：`、不要输出 <think> 标签、不要输出角色名、不要续写下一题。"
-    "在给出 `Final Answer:` 后立即停止。"
+    "You are a rigorous mathematical reasoning assistant. "
+    "You must strictly use English labels `Step 1:`, `Step 2:`, ... and `Final Answer:`. "
+    "Do not use Chinese labels such as `步骤1：`, do not output <think> tags, "
+    "do not output role names, and do not continue into the next question. "
+    "Stop immediately after providing `Final Answer:`."
 )
 TEACHER_SYSTEM_TEMPLATE = (
-    "你是教师模型。你知道题目的参考解，并需要对学生当前解答前缀的下一 token 概率分布进行评估。"
-    "你必须延续学生当前的解答风格与格式，不要开启新对话，不要输出角色标签。\n"
-    "参考解如下：\n{reference_solution}"
+    "You are the teacher model. You know the reference solution to the problem and must "
+    "evaluate the next-token probability distribution for the student's current solution prefix. "
+    "You must continue the student's current style and format, do not start a new conversation, "
+    "and do not output role labels.\n"
+    "Reference solution:\n{reference_solution}"
 )
 
 STUDENT_FORMAT_PROMPT = (
-    "请严格按照以下格式解题，只能使用英文标签：\n"
+    "Solve the problem strictly using the following format and only English labels:\n"
     "Step 1: ...\n"
     "Step 2: ...\n"
     "Step 3: ...\n"
@@ -90,7 +93,7 @@ def render_chat_prompt(tokenizer, system_text: str, user_text: str, assistant_pr
 
 
 def build_user_text(question: str) -> str:
-    return f"{STUDENT_FORMAT_PROMPT}\n\n题目：{question}\n请开始解题。"
+    return f"{STUDENT_FORMAT_PROMPT}\n\nProblem: {question}\nPlease start solving now."
 
 
 def normalize_text(text: str) -> str:
