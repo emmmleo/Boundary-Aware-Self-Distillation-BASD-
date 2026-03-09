@@ -68,7 +68,7 @@ python basd_pilot/run_formal_experiment.py \
   --out_dir outputs/formal_gsm8k_qwen3_8b_debug \
   --model_name /scratch/azureml/yz/model/Qwen3-8B \
   --temperature 0 \
-  --max_new_tokens 256 \
+  --max_new_tokens 2048 \
   --limit 20
 ```
 
