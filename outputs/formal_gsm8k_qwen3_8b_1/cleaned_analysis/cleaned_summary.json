@@ -1,0 +1,79 @@
+﻿{
+    "input_path":  "outputs\\formal_gsm8k_qwen3_8b_1\\records.jsonl",
+    "n_total":  396,
+    "n_original_correct":  238,
+    "n_original_wrong":  158,
+    "n_cleaned_correct":  250,
+    "n_cleaned_wrong":  146,
+    "n_recovered_correct":  12,
+    "n_analyzable_wrong":  35,
+    "n_wrong_format_noise":  108,
+    "n_wrong_unanalyzable":  3,
+    "category_counts":  {
+                            "correct_original":  238,
+                            "recovered_correct":  12,
+                            "wrong_analyzable":  35,
+                            "wrong_unanalyzable":  3,
+                            "wrong_format_noise":  108
+                        },
+    "category_examples":  {
+                              "wrong_unanalyzable":  [
+                                                         "gsm8k-test-14",
+                                                         "gsm8k-test-219",
+                                                         "gsm8k-test-306"
+                                                     ],
+                              "recovered_correct":  [
+                                                        "gsm8k-test-36",
+                                                        "gsm8k-test-109",
+                                                        "gsm8k-test-137",
+                                                        "gsm8k-test-151",
+                                                        "gsm8k-test-152",
+                                                        "gsm8k-test-158",
+                                                        "gsm8k-test-195",
+                                                        "gsm8k-test-227",
+                                                        "gsm8k-test-258",
+                                                        "gsm8k-test-317"
+                                                    ],
+                              "correct_original":  [
+                                                       "gsm8k-test-1",
+                                                       "gsm8k-test-3",
+                                                       "gsm8k-test-4",
+                                                       "gsm8k-test-5",
+                                                       "gsm8k-test-6",
+                                                       "gsm8k-test-10",
+                                                       "gsm8k-test-13",
+                                                       "gsm8k-test-15",
+                                                       "gsm8k-test-18",
+                                                       "gsm8k-test-19"
+                                                   ],
+                              "wrong_format_noise":  [
+                                                         "gsm8k-test-2",
+                                                         "gsm8k-test-7",
+                                                         "gsm8k-test-8",
+                                                         "gsm8k-test-12",
+                                                         "gsm8k-test-21",
+                                                         "gsm8k-test-26",
+                                                         "gsm8k-test-30",
+                                                         "gsm8k-test-33",
+                                                         "gsm8k-test-34",
+                                                         "gsm8k-test-38"
+                                                     ],
+                              "wrong_analyzable":  [
+                                                       "gsm8k-test-0",
+                                                       "gsm8k-test-9",
+                                                       "gsm8k-test-43",
+                                                       "gsm8k-test-80",
+                                                       "gsm8k-test-135",
+                                                       "gsm8k-test-140",
+                                                       "gsm8k-test-173",
+                                                       "gsm8k-test-181",
+                                                       "gsm8k-test-198",
+                                                       "gsm8k-test-207"
+                                                   ]
+                          },
+    "output_files":  {
+                         "wrong_for_jump_analysis":  "outputs\\formal_gsm8k_qwen3_8b_1\\cleaned_analysis\\wrong_for_jump_analysis.jsonl",
+                         "cleaned_records":  "outputs\\formal_gsm8k_qwen3_8b_1\\cleaned_analysis\\records.cleaned.jsonl",
+                         "recovered_correct":  "outputs\\formal_gsm8k_qwen3_8b_1\\cleaned_analysis\\recovered_correct.jsonl"
+                     }
+}
