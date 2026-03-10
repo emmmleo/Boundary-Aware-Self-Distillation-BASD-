@@ -48,7 +48,17 @@ def build_teacher_prompt(tokenizer, sample, max_steps: int) -> str:
     return render_chat_prompt(tokenizer, teacher_system, render_student_user_prompt(sample.question, max_steps))
 
 
-def generate_student_text(model, tokenizer, sample, max_steps: int, max_new_tokens: int, temperature: float, top_p: float) -> str:
+def generate_student_text(
+    model,
+    tokenizer,
+    sample,
+    max_steps: int,
+    max_new_tokens: int,
+    temperature: float,
+    top_p: float,
+    top_k: int,
+    min_p: float,
+) -> str:
     prompt = build_student_prompt(tokenizer, sample.question, max_steps)
     device = device_of(model)
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
@@ -63,6 +73,8 @@ def generate_student_text(model, tokenizer, sample, max_steps: int, max_new_toke
     if do_sample:
         generate_kwargs["temperature"] = temperature
         generate_kwargs["top_p"] = top_p
+        generate_kwargs["top_k"] = top_k
+        generate_kwargs["min_p"] = min_p
     with torch.inference_mode():
         output = model.generate(**inputs, **generate_kwargs)
     generated_ids = output[0][inputs["input_ids"].shape[1] :]
@@ -232,6 +244,8 @@ def summarize_run(records: List[Dict], args) -> Dict:
         "n_wrong": len(wrong),
         "temperature": args.temperature,
         "top_p": args.top_p,
+        "top_k": args.top_k,
+        "min_p": args.min_p,
         "max_new_tokens": args.max_new_tokens,
         "max_step_count": args.max_step_count,
         "overflow_mode": args.overflow_mode,
@@ -246,7 +260,9 @@ def main() -> None:
     parser.add_argument("--model_name", required=True, help="HF model name or local path.")
     parser.add_argument("--limit", type=int, default=0, help="Process only the first N samples. 0 means all.")
     parser.add_argument("--temperature", type=float, default=0.7)
-    parser.add_argument("--top_p", type=float, default=0.95)
+    parser.add_argument("--top_p", type=float, default=0.8)
+    parser.add_argument("--top_k", type=int, default=20)
+    parser.add_argument("--min_p", type=float, default=0.0)
     parser.add_argument("--max_new_tokens", type=int, default=768)
     parser.add_argument("--max_step_count", type=int, default=16)
     parser.add_argument("--overflow_mode", choices=["truncate", "discard"], default="truncate")
@@ -282,6 +298,8 @@ def main() -> None:
             max_new_tokens=args.max_new_tokens,
             temperature=args.temperature,
             top_p=args.top_p,
+            top_k=args.top_k,
+            min_p=args.min_p,
         )
         step_parse = parse_structured_solution(
             text=raw_text,

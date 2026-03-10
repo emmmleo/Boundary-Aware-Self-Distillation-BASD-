@@ -161,7 +161,15 @@ def render_chat_prompt(tokenizer, system_prompt: str, user_prompt: str) -> str:
         {"role": "user", "content": user_prompt},
     ]
     if hasattr(tokenizer, "apply_chat_template"):
-        return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        try:
+            return tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                enable_thinking=False,
+            )
+        except TypeError:
+            return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     return f"System: {system_prompt}\nUser: {user_prompt}\nAssistant: "
 
 

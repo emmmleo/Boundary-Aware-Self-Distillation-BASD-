@@ -99,7 +99,9 @@ python -m basd_protocol.run_protocol \
   --out_dir outputs/basd_protocol_run \
   --model_name models/Qwen3-8B \
   --temperature 0.7 \
-  --top_p 0.95 \
+  --top_p 0.8 \
+  --top_k 20 \
+  --min_p 0.0 \
   --max_new_tokens 768 \
   --max_step_count 16 \
   --compute_token_kl \
