@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import time
 from collections import defaultdict
 from typing import Dict, List, Tuple
@@ -253,6 +254,27 @@ def summarize_run(records: List[Dict], args) -> Dict:
     }
 
 
+def format_duration(seconds: float) -> str:
+    seconds = max(0, int(round(seconds)))
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours > 0:
+        return f"{hours:d}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+def print_progress(index: int, total: int, sample_id: str, stage: str, started_at: float, average_runtime: float | None = None) -> None:
+    total = max(total, 1)
+    width = 24
+    filled = int(width * index / total)
+    bar = "#" * filled + "-" * (width - filled)
+    elapsed = format_duration(time.time() - started_at)
+    eta = "--:--" if average_runtime is None else format_duration(max(total - index, 0) * average_runtime)
+    message = f"[{bar}] {index}/{total} | {stage:<10} | {sample_id} | elapsed {elapsed} | eta {eta}"
+    sys.stdout.write("\r" + message[:180].ljust(180))
+    sys.stdout.flush()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Standalone BASD protocol runner.")
     parser.add_argument("--input", required=True, help="Input jsonl with question/reference_solution/final_answer fields.")
@@ -271,10 +293,12 @@ def main() -> None:
     args = parser.parse_args()
 
     ensure_dir(args.out_dir)
+    print(f"Loading tokenizer from `{args.model_name}`...", flush=True)
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
     if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
         tokenizer.pad_token = tokenizer.eos_token
 
+    print(f"Loading model from `{args.model_name}`...", flush=True)
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
         torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
@@ -288,8 +312,13 @@ def main() -> None:
         samples = samples[: args.limit]
 
     records: List[Dict] = []
+    run_started = time.time()
+    total_samples = len(samples)
+    print(f"Running BASD protocol on {total_samples} samples...", flush=True)
     for index, sample in enumerate(samples, start=1):
         started = time.time()
+        average_runtime = (time.time() - run_started) / len(records) if records else None
+        print_progress(index - 1, total_samples, sample.sample_id, "generate", run_started, average_runtime)
         raw_text = generate_student_text(
             model=model,
             tokenizer=tokenizer,
@@ -301,6 +330,7 @@ def main() -> None:
             top_k=args.top_k,
             min_p=args.min_p,
         )
+        print_progress(index - 1, total_samples, sample.sample_id, "score", run_started, average_runtime)
         step_parse = parse_structured_solution(
             text=raw_text,
             max_step_count=args.max_step_count,
@@ -357,10 +387,13 @@ def main() -> None:
             "runtime_seconds": round(time.time() - started, 4),
         }
         records.append(record)
+        average_runtime = (time.time() - run_started) / len(records)
+        print_progress(index, total_samples, sample.sample_id, "done", run_started, average_runtime)
 
         if index % 10 == 0 or index == len(samples):
             write_jsonl(os.path.join(args.out_dir, "records.partial.jsonl"), records)
 
+    sys.stdout.write("\n")
     write_jsonl(os.path.join(args.out_dir, "records.jsonl"), records)
     write_csv(
         os.path.join(args.out_dir, "annotation_template.csv"),
