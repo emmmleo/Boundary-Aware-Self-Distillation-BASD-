@@ -1,0 +1,26 @@
+{
+  "n_records": 20,
+  "format_success_rate": 0.55,
+  "avg_num_steps": 5.909090909090909,
+  "avg_num_tokens": 234.55,
+  "boundary_eval_by_gap": {},
+  "boundary_eval_by_gap_jump": {},
+  "boundary_eval_by_kl": {},
+  "correct_wrong_gap": {
+    "field": "avg_gap",
+    "correct_mean": 0.1247825102480202,
+    "correct_median": 0.1144546878367737,
+    "wrong_mean": 0.055326903077696395,
+    "wrong_median": 0.06012675548211122,
+    "wrong_gt_correct_ratio": 0.2125
+  },
+  "correct_wrong_kl": {
+    "field": "avg_kl",
+    "correct_mean": 0.31787401471823645,
+    "correct_median": 0.28022213031861753,
+    "wrong_mean": 0.48084590130318283,
+    "wrong_median": 0.3600758213475305,
+    "wrong_gt_correct_ratio": 0.5375
+  },
+  "boundary_pattern_yes_among_wrong": null
+}

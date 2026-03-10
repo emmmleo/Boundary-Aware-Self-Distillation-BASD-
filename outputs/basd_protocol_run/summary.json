@@ -1,0 +1,16 @@
+{
+  "input_path": "data/gsm8k_test_full.jsonl",
+  "model_name": "models/Qwen3-8B",
+  "n_records": 20,
+  "format_success_rate": 0.55,
+  "avg_num_steps": 5.909090909090909,
+  "avg_num_tokens": 234.55,
+  "n_correct": 11,
+  "n_wrong": 9,
+  "temperature": 0.7,
+  "top_p": 0.95,
+  "max_new_tokens": 768,
+  "max_step_count": 16,
+  "overflow_mode": "truncate",
+  "compute_token_kl": true
+}
