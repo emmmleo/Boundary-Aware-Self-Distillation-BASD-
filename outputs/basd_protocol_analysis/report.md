@@ -7,13 +7,13 @@
 - avg_num_tokens: 244.95
 
 ## Boundary Metrics
-- gap_argmax: {}
-- gap_jump: {}
-- kl_argmax: {}
+- gap_argmax: {"n": 4, "exact_match_rate": 0.25, "near_match_rate": 0.5, "mean_absolute_error": 1.5}
+- gap_jump: {"n": 4, "exact_match_rate": 0.25, "near_match_rate": 0.5, "mean_absolute_error": 2.0}
+- kl_argmax: {"n": 4, "exact_match_rate": 0.0, "near_match_rate": 0.25, "mean_absolute_error": 3.0}
 
 ## Correct vs Wrong
 - max_gap: {"field": "avg_gap", "correct_mean": 0.026247739730862647, "correct_median": 0.01699559963127701, "wrong_mean": 0.01175658562109709, "wrong_median": 0.011991009618070207, "wrong_gt_correct_ratio": 0.328125}
 - max_kl: {"field": "avg_kl", "correct_mean": 0.7687807730290014, "correct_median": 0.49208577289368177, "wrong_mean": 0.8304974661980289, "wrong_median": 0.7192803181872007, "wrong_gt_correct_ratio": 0.5625}
 
 ## Boundary Coverage
-- boundary_pattern_yes_among_wrong: None
+- boundary_pattern_yes_among_wrong: 0.75

@@ -3,9 +3,24 @@
   "format_success_rate": 1.0,
   "avg_num_steps": 9.8,
   "avg_num_tokens": 244.95,
-  "boundary_eval_by_gap": {},
-  "boundary_eval_by_gap_jump": {},
-  "boundary_eval_by_kl": {},
+  "boundary_eval_by_gap": {
+    "n": 4,
+    "exact_match_rate": 0.25,
+    "near_match_rate": 0.5,
+    "mean_absolute_error": 1.5
+  },
+  "boundary_eval_by_gap_jump": {
+    "n": 4,
+    "exact_match_rate": 0.25,
+    "near_match_rate": 0.5,
+    "mean_absolute_error": 2.0
+  },
+  "boundary_eval_by_kl": {
+    "n": 4,
+    "exact_match_rate": 0.0,
+    "near_match_rate": 0.25,
+    "mean_absolute_error": 3.0
+  },
   "correct_wrong_gap": {
     "field": "avg_gap",
     "correct_mean": 0.026247739730862647,
@@ -22,5 +37,5 @@
     "wrong_median": 0.7192803181872007,
     "wrong_gt_correct_ratio": 0.5625
   },
-  "boundary_pattern_yes_among_wrong": null
+  "boundary_pattern_yes_among_wrong": 0.75
 }

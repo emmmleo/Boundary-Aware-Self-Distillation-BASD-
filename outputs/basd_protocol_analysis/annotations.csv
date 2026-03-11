@@ -1,0 +1,5 @@
+sample_id,first_error_step,error_type,boundary_pattern,comments
+gsm8k-test-4,4,arithmetic_or_final_computation,unclear,"Steps 1-3 are consistent with the correct setup; the first explicit failure appears only in the last subtraction/final answer, but the step text omits the actual arithmetic."
+gsm8k-test-7,7,restart_misinterpretation,yes,"The reasoning is correct through the first 40 minutes and the 20-minute restart. The first conceptual error is treating the post-restart task as downloading the remaining 120 GB instead of restarting the full 200 GB from scratch."
+gsm8k-test-12,7,off_by_one_break_even,yes,"Step 6 correctly finds 12 years to break even. Step 7 misreads 'starts earning money' and should advance one more year, giving year 13."
+gsm8k-test-14,3,percentage_arithmetic,yes,"The correct path is 20% of 20 = 4, remaining 16, then 25% of 16 = 4, leaving 12 hip-hop students or 60%. The 55% final answer implies the first wrong computation occurs when taking 25% of the remaining students."
