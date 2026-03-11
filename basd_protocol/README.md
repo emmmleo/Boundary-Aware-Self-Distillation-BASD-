@@ -96,7 +96,7 @@ outputs/
 ```bash
 python -m basd_protocol.run_protocol \
   --input data/gsm8k_test_full.jsonl \
-  --out_dir outputs/basd_protocol_run \
+  --out_dir outputs/basd_protocol_run100 \
   --model_name models/Qwen3-8B \
   --temperature 0.7 \
   --top_p 0.8 \
@@ -105,14 +105,15 @@ python -m basd_protocol.run_protocol \
   --max_new_tokens 768 \
   --max_step_count 16 \
   --compute_token_kl \
-  --limit 20
+  --limit 100
 ```
 
 ```bash
 python -m basd_protocol.analyze_protocol \
   --records outputs/basd_protocol_run/records.jsonl \
   --annotations outputs/basd_protocol_run/annotation_template.csv \
-  --out_dir outputs/basd_protocol_analysis
+  --out_dir outputs/basd_protocol_analysis100 \
+  --plot_cases 30
 ```
 
 ## 脚本输出
