@@ -7,6 +7,7 @@ import argparse
 import json
 import math
 import os
+import sys
 from collections import defaultdict
 from statistics import mean, median
 from typing import Dict, Iterable, List, Optional, Sequence
@@ -175,7 +176,8 @@ def select_case_records(records: Sequence[Dict], limit: int) -> List[Dict]:
 def maybe_plot(records: Sequence[Dict], out_dir: str, case_limit: int) -> None:
     try:
         import matplotlib.pyplot as plt
-    except Exception:
+    except Exception as exc:
+        print(f"[warn] plotting skipped: failed to import matplotlib ({exc})", file=sys.stderr)
         return
 
     token_dir = os.path.join(out_dir, "token_level_cases")
