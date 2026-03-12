@@ -121,7 +121,7 @@ pip install -U torch transformers peft accelerate datasets pyyaml numpy pytest
 ### 5.2 启动训练
 
 ```bash
-python scripts/train_basd.py --config configs/basd_qwen3_8b.yaml
+python scripts/train_basd.py --config configs/opsd_baseline_4b.yaml
 ```
 
 训练日志会写到：

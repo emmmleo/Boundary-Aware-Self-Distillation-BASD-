@@ -1,0 +1,70 @@
+model:
+  base_model_name_or_path: models/Qwen3-4B
+  use_lora: true
+  lora_r: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  torch_dtype: bfloat16
+  gradient_checkpointing: true
+
+data:
+  train_file: data/opsdtrain_basd.jsonl
+  eval_file: /scratch/azureml/Boundary-Aware-Self-Distillation-BASD-/data/aime24_full.jsonl
+  max_samples: null
+
+prompt:
+  step_tag_format: "<<STEP_{i}>>"
+  final_tag: "<<FINAL>>"
+
+generation:
+  max_new_tokens: 768
+  do_sample: true
+  temperature: 0.7
+  top_p: 0.95
+  repetition_penalty: 1.0
+
+distill:
+  vocab_mode: full
+  topk: 64
+  objective: jsd
+  w_jsd: 1.0
+  w_reverse_kl: 0.0
+  w_pg: 0.0
+  temperature: 1.0
+  base_weight: 1.0
+
+boundary:
+  signal_type: sampled_gap
+  smooth_alpha: 0.3
+  abs_threshold: 999.0
+  jump_threshold: 999.0
+  persist_window: 999
+  min_valid_tokens_before_boundary: 999
+
+weighting:
+  correct_uniform_weight: 1.0
+  incorrect_fallback_uniform_weight: 1.0
+  step_weight_table:
+    "-2": 1.0
+    "-1": 1.0
+    "0": 1.0
+    "1": 1.0
+    "2": 1.0
+
+train:
+  seed: 42
+  per_device_batch_size: 1
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-5
+  num_train_steps: 2000
+  warmup_steps: 100
+  save_steps: 100
+  eval_steps: 100
+  log_steps: 10
+
+debug:
+  save_rollout_debug_every: 50
+  max_debug_samples: 100
+
+output_dir: output/train_runs/opsd_baseline_qwen3_4b
