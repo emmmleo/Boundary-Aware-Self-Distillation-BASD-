@@ -8,6 +8,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 from basd.model.loader import load_student_teacher_model, load_tokenizer
 from basd.trainer.engine import BASDTrainer
 from basd.utils.config import load_yaml

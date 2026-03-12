@@ -1,4 +1,6 @@
 __pycache__/
 .venv/
 models/
+data/openthoughts_math_30k.jsonl
+data/opsdtrain_basd.jsonl
 # outputs/
