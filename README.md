@@ -1,123 +1,241 @@
-# BASD 正式预实验（Qwen3-8B + 完整数据集）
+# BASD 主实验代码说明（Boundary-Aware Self-Distillation）
 
-本仓库已升级为**正式预实验版本**，目标是验证：
-
-1. 错误样本的 step-level KL 是否呈现“前低后高 + 跃迁”；
-2. 跃迁边界是否接近 first error step；
-3. `max jump step` 是否优于 `max absolute KL step`。
+> 这个仓库当前同时包含两部分：
+> 1) 早期/预实验脚本（`basd_pilot/`, `basd_protocol/`）
+> 2) **主实验新实现**（`basd/`, `scripts/train_basd.py`）
+>
+> 本 README 重点介绍你现在要跑的 **主实验新实现**，不依赖旧的 pre-experiment 训练逻辑。
 
 ---
 
-## 1) 环境准备
+## 1. 方法概述
 
-```bash
-pip install -U transformers datasets torch matplotlib accelerate
+主实验采用“on-policy 自蒸馏 + 错误样本边界增强”的训练流程：
+
+1. student（base + LoRA）先对题目做 on-policy rollout。
+2. teacher 使用同一个 base model，但禁用 LoRA，并额外看到 `reference_solution` 作为 privileged context。
+3. 在同一条 student completion 上，分别计算 teacher/student 的 token-level 打分。
+4. 若样本答对：全序列（reasoning + final）统一权重蒸馏。
+5. 若样本答错：在 reasoning token 上检测 boundary（信号跃升点），并把 boundary 映射到 step，对邻域 step 做权重提升。
+6. loss 统一为 distillation（可切换 `full-vocab KL` 与 `teacher-topk renormalized KL`）。
+
+核心思想：
+- **detect with gap / train with KL**
+- **uniform base + local boost（错误样本不清零非边界 token）**
+
+---
+
+## 2. 项目结构（主实验相关）
+
+```text
+basd/
+  types.py                      # 训练核心 dataclass
+  data/
+    dataset.py                  # JsonlMathDataset
+    prompt_builder.py           # student/teacher prompt
+    answer_extractor.py         # 抽取 final answer + 对错判断
+    collator.py
+  model/
+    loader.py                   # tokenizer/base+LoRA 加载、teacher/student adapter 切换
+    scoring.py                  # completion logits 对齐 + sampled token logprob
+    peft_utils.py
+  rollout/
+    generator.py                # on-policy generation
+    parser.py                   # <<STEP_i>> / <<FINAL>> 解析
+    aligner.py                  # text span -> token 对齐
+  signal/
+    token_metrics.py            # sampled gap / token KL
+    boundary_detector.py        # EMA + jump + persistence 检测
+    weighting.py                # boundary step 邻域权重
+  loss/
+    distill.py                  # full KL / teacher_topk KL
+    masks.py
+  trainer/
+    step_fn.py                  # 单步训练流程
+    engine.py                   # manual loop + accelerate
+    logger.py                   # JSONL debug 日志
+  eval/
+    metrics.py
+    evaluator.py
+  utils/
+    config.py / seed.py / io.py / distributed.py
+
+scripts/
+  train_basd.py                 # 主训练入口
+  eval_basd.py                  # 简单评估入口
+  tune_boundary_from_protocol.py# 用 protocol 记录估阈值
+  inspect_rollout_debug.py      # 查看 debug 样本
+
+configs/
+  basd_qwen3_8b.yaml            # 主配置
+  distill_full_vocab.yaml       # distill ablation
+  distill_teacher_topk.yaml     # distill ablation
+  boundary_default.yaml         # boundary 默认参数
 ```
 
-> 推荐使用有 GPU 的环境运行 Qwen3-8B。
-
 ---
 
-## 1.5) 下载 Qwen3-8B 到本地（可选）
+## 3. 环境安装
 
-如果你希望先把模型下载到本地再运行实验，可以执行：
+建议 Python 3.10+。
 
 ```bash
-pip install -U huggingface_hub
-python download_qwen3_8b.py --local-dir models/Qwen3-8B
+pip install -U torch transformers peft accelerate datasets pyyaml numpy pytest
 ```
 
-如果使用国内镜像，可先设置：
+> 如果你使用 Qwen3-8B，请确认 GPU 显存足够，并根据机器情况配置 bf16 / grad checkpoint / LoRA 参数。
+
+---
+
+## 4. 数据格式
+
+训练数据建议是 JSONL，每行最少包含：
+
+```json
+{
+  "sample_id": "gsm8k_001",
+  "question": "...",
+  "gold_answer": "...",
+  "reference_solution": "..."
+}
+```
+
+兼容字段：
+- `sample_id` 缺失时可回退 `id`
+- `gold_answer` 缺失时可回退 `answer`
+- `reference_solution` 缺失时可回退 `solution`
+
+---
+
+## 5. 快速开始
+
+### 5.1 修改配置
+
+先检查 `configs/basd_qwen3_8b.yaml`：
+
+- `model.base_model_name_or_path`
+- `data.train_file`
+- `train.num_train_steps`
+- `distill.vocab_mode`（`full` 或 `teacher_topk`）
+
+### 5.2 启动训练
 
 ```bash
-export HF_ENDPOINT=https://hf-mirror.com
-python download_qwen3_8b.py --local-dir models/Qwen3-8B
+python scripts/train_basd.py --config configs/basd_qwen3_8b.yaml
 ```
 
-下载后运行实验时，将 `--model_name` 改为本地目录即可（例如 `models/Qwen3-8B`）。
+训练日志会写到：
+- `output/train_runs/.../train_debug.jsonl`
+
+最终 checkpoint 默认保存到：
+- `output/train_runs/.../final_ckpt`
 
 ---
 
-## 2) 准备完整数据集（GSM8K 全量 test）
+## 6. 关键配置说明
+
+### 6.1 蒸馏模式
+
+```yaml
+distill:
+  vocab_mode: teacher_topk   # full | teacher_topk
+  topk: 64
+```
+
+- `full`: full-vocab KL（更贴近 OPSD 默认设定）
+- `teacher_topk`: teacher top-k 子词表重归一化 KL（更省算力）
+
+### 6.2 boundary 检测
+
+```yaml
+boundary:
+  signal_type: sampled_gap   # sampled_gap | token_kl
+  smooth_alpha: 0.3
+  abs_threshold: 0.8
+  jump_threshold: 0.5
+  persist_window: 8
+```
+
+- 检测建议先用 `sampled_gap`
+- 训练 loss 继续用 KL
+
+### 6.3 权重策略
+
+```yaml
+weighting:
+  correct_uniform_weight: 1.0
+  incorrect_fallback_uniform_weight: 1.0
+  step_weight_table:
+    "-2": 1.2
+    "-1": 1.5
+    "0": 3.0
+    "1": 2.5
+    "2": 1.8
+```
+
+- 正确样本：统一权重
+- 错误样本：统一基础权重 + boundary 邻域 boost
+- 未检测到 boundary：回退为统一权重，不丢样本
+
+---
+
+## 7. 评估与辅助脚本
+
+### 7.1 评估
 
 ```bash
-python data/prepare_gsm8k_full.py --out data/gsm8k_test_full.jsonl
+python scripts/eval_basd.py --records <your_records.jsonl>
 ```
 
-输出字段：
-- `id`
-- `question`
-- `reference_solution`
-
----
-
-## 3) 运行正式预实验（Qwen3-8B）
+### 7.2 基于 protocol 自动估阈值
 
 ```bash
-python basd_pilot/run_formal_experiment.py \
-  --input data/gsm8k_test_full.jsonl \
-  --out_dir outputs/formal_gsm8k_qwen3_8b \
-  --model_name /scratch/azureml/yz/model/Qwen3-8B \
-  --temperature 0.7 \
-  --top_p 0.95 \
-  --max_new_tokens 1024 \
-  --limit 20
-
-python basd_pilot/run_formal_experiment.py \
-  --input data/gsm8k_test_full.jsonl \
-  --out_dir outputs/formal_gsm8k_qwen3_8b_debug \
-  --model_name /scratch/azureml/yz/model/Qwen3-8B \
-  --temperature 0 \
-  --max_new_tokens 2048 \
-  --limit 20
-
-torchrun --nproc_per_node=8 basd_pilot/run_formal_experiment.py \
-  --input data/gsm8k_test_full.jsonl \
-  --out_dir outputs/formal_gsm8k_qwen3_8b_fast \
-  --model_name /scratch/azureml/yz/model/Qwen3-8B \
-  --temperature 0.0 \
-  --max_new_tokens 1024 \
-  --limit 24
+python scripts/tune_boundary_from_protocol.py \
+  --protocol_records outputs/basd_protocol_run100/records.jsonl
 ```
 
-- `--limit 0` 表示跑完整数据集。
-- 若仅调试，可设 `--limit 20`。
+### 7.3 debug 样本查看
+
+```bash
+python scripts/inspect_rollout_debug.py \
+  --debug_jsonl output/train_runs/basd_qwen3_8b/train_debug.jsonl
+```
 
 ---
 
-## 4) 方法对应关系
+## 8. 测试
 
-脚本 `basd_pilot/run_formal_experiment.py` 实现：
+```bash
+python -m pytest -q
+```
 
-1. student 按 step-by-step 生成解答；
-2. teacher/student 在同一条 student rollout 上逐 token 打分；
-3. 聚合成 step-level KL：`D_i`；
-4. 边界检测：`argmax_i (D_i - D_{i-1})`；
-5. 对照基线：`argmax_i D_i`；
-6. 导出人工标注模板并计算统计。
+当前包含：
+- parser / boundary 检测基础单测
+- distill loss 两种模式数值稳定性单测
 
-teacher/student 共享同一 backbone（Qwen3-8B），差异仅在上下文：
-- teacher 看到 `question + reference_solution`
-- student 仅看到 `question`
+如环境缺 `torch` 会在收集阶段报错，请先安装依赖后再跑。
 
 ---
 
-## 5) 输出文件
+## 9. 常见问题
 
-`outputs/formal_gsm8k_qwen3_8b/` 下：
+### Q1: teacher 和 student 是否复制了两份 8B 权重？
+没有。当前设计是同一 base model，student 打开 LoRA adapter，teacher 关闭 LoRA adapter。
 
-- `records.jsonl`：每题完整记录（student 解答、step-KL 曲线、boundary）
-- `annotation_template.csv`：人工 first-error 标注模板
-- `summary.json`：全局统计
+### Q2: 为什么 boundary 只在 reasoning 区域检测？
+为了避免“最终答案 token gap 最大导致边界总落结尾”的假阳性。
+
+### Q3: 错误样本只训练 boundary 附近吗？
+不是。采用“全局保底 + 局部增强”，更稳定。
+
+### Q4: 如何做 OPSD 对齐对比？
+把 `distill.vocab_mode` 切到 `full` 跑 baseline。
 
 ---
 
-## 6) 人工标注与最终统计
+## 10. 与旧代码关系
 
-默认运行中 `manual_first_error_step` 为 `None`，请在 `annotation_template.csv` 中补标后，回填到 `records.jsonl` 再做最终统计。
+- `basd_pilot/`、`basd_protocol/`：历史预实验与协议分析代码。
+- `basd/` + `scripts/train_basd.py`：主实验训练框架。
 
-建议指标：
-- exact match
-- ±1 hit rate
-- MAE
-- max jump vs max absolute KL 对照胜率
+建议主实验论文与复现实验优先使用 `basd/` 这套模块化实现。
