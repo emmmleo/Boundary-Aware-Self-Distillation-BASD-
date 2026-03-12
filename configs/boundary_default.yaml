@@ -1,0 +1,7 @@
+boundary:
+  signal_type: sampled_gap
+  smooth_alpha: 0.3
+  abs_threshold: 0.8
+  jump_threshold: 0.5
+  persist_window: 8
+  min_valid_tokens_before_boundary: 12

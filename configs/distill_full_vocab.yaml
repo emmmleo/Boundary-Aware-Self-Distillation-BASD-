@@ -1,0 +1,7 @@
+distill:
+  vocab_mode: full
+  objective: opsd_jsd_reverse_kl_pg
+  w_jsd: 1.0
+  w_reverse_kl: 1.0
+  w_pg: 1.0
+  topk: 64
