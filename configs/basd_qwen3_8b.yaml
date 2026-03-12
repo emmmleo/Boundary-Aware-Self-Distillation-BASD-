@@ -27,6 +27,10 @@ generation:
 distill:
   vocab_mode: teacher_topk
   topk: 64
+  objective: opsd_jsd_reverse_kl_pg
+  w_jsd: 1.0
+  w_reverse_kl: 1.0
+  w_pg: 1.0
   temperature: 1.0
   base_weight: 1.0
 

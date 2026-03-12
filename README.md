@@ -17,7 +17,7 @@
 3. 在同一条 student completion 上，分别计算 teacher/student 的 token-level 打分。
 4. 若样本答对：全序列（reasoning + final）统一权重蒸馏。
 5. 若样本答错：在 reasoning token 上检测 boundary（信号跃升点），并把 boundary 映射到 step，对邻域 step 做权重提升。
-6. loss 统一为 distillation（可切换 `full-vocab KL` 与 `teacher-topk renormalized KL`）。
+6. loss 采用 OPSD 风格目标：`JSD + reverse-KL + PG`（可分别开关），词表空间可切 `full` 或 `teacher_topk`。
 
 核心思想：
 - **detect with gap / train with KL**
@@ -139,11 +139,15 @@ python scripts/train_basd.py --config configs/basd_qwen3_8b.yaml
 ```yaml
 distill:
   vocab_mode: teacher_topk   # full | teacher_topk
+  objective: opsd_jsd_reverse_kl_pg
+  w_jsd: 1.0
+  w_reverse_kl: 1.0
+  w_pg: 1.0
   topk: 64
 ```
 
-- `full`: full-vocab KL（更贴近 OPSD 默认设定）
-- `teacher_topk`: teacher top-k 子词表重归一化 KL（更省算力）
+- `full`: 在全词表上计算 JSD/reverse-KL/PG 所需概率
+- `teacher_topk`: 在 teacher top-k 子词表上重归一化后计算对应项（更省算力）
 
 ### 6.2 boundary 检测
 
