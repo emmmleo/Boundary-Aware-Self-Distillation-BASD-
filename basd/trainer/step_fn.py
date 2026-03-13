@@ -18,6 +18,7 @@ from basd.types import BoundaryResult, DistillBatchOutput
 def run_train_step(batch_examples, model, tokenizer, accelerator, cfg):
     total_loss = None
     aux_rows = []
+    skipped_no_steps = 0
 
     for ex in batch_examples:
         student_prompt = build_student_prompt(ex.question, PromptConfig(**cfg["prompt"]))
@@ -25,6 +26,7 @@ def run_train_step(batch_examples, model, tokenizer, accelerator, cfg):
         step_spans = parse_steps_from_text(completion_text)
 
         if not step_spans:
+            skipped_no_steps += 1
             continue
 
         token_step_ids, reasoning_mask, final_answer_mask = align_tokens_to_steps(
@@ -90,4 +92,13 @@ def run_train_step(batch_examples, model, tokenizer, accelerator, cfg):
         total_loss = total_loss / len(aux_rows)
     else:
         total_loss = torch.zeros((), device=accelerator.device)
-    return DistillBatchOutput(loss=total_loss, aux={"rows": aux_rows, "empty_batch": not aux_rows})
+    return DistillBatchOutput(
+        loss=total_loss,
+        aux={
+            "rows": aux_rows,
+            "empty_batch": not aux_rows,
+            "num_examples": len(batch_examples),
+            "num_used": len(aux_rows),
+            "num_skipped_no_steps": skipped_no_steps,
+        },
+    )

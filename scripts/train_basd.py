@@ -22,11 +22,16 @@ def main():
     parser.add_argument("--config", type=str, default="configs/basd_qwen3_8b.yaml")
     args = parser.parse_args()
 
+    print(f"[main] loading config from {args.config}", flush=True)
     cfg = load_yaml(args.config)
     set_seed(cfg["train"]["seed"])
+    print(f"[main] seed set to {cfg['train']['seed']}", flush=True)
+    print(f"[main] loading tokenizer from {cfg['model']['base_model_name_or_path']}", flush=True)
     tokenizer = load_tokenizer(cfg)
+    print(f"[main] loading model from {cfg['model']['base_model_name_or_path']}", flush=True)
     model = load_student_teacher_model(cfg)
 
+    print(f"[main] starting trainer, outputs -> {cfg.get('output_dir', 'output/train_runs/default')}", flush=True)
     trainer = BASDTrainer(model=model, tokenizer=tokenizer, cfg=cfg)
     trainer.train()
 

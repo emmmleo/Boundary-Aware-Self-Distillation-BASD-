@@ -1,4 +1,5 @@
 from pathlib import Path
+from time import perf_counter
 
 import torch
 from accelerate import Accelerator
@@ -32,15 +33,30 @@ class BASDTrainer:
 
     def train(self):
         loader = self._build_loader()
+        dataset_size = len(loader.dataset)
+        planned_steps = int(self.cfg["train"]["num_train_steps"])
+        log_steps = int(self.cfg["train"]["log_steps"])
+
+        self.accelerator.print(
+            f"[train] data ready: {dataset_size} samples, batch_size={self.cfg['train']['per_device_batch_size']}, "
+            f"grad_accum={self.cfg['train']['gradient_accumulation_steps']}, planned_steps={planned_steps}"
+        )
         self.model, self.optimizer, loader = self.accelerator.prepare(self.model, self.optimizer, loader)
         self.model.train()
+        self.accelerator.print("[train] model/optimizer prepared, entering training loop")
 
         global_step = 0
         for batch in loader:
+            step_start = perf_counter()
             with self.accelerator.accumulate(self.model):
                 result = run_train_step(batch, self.model, self.tokenizer, self.accelerator, self.cfg)
                 if result.aux.get("empty_batch", False):
                     self.optimizer.zero_grad(set_to_none=True)
+                    self.accelerator.print(
+                        f"[train] skipped batch at step {global_step + 1}: "
+                        f"used=0/{result.aux.get('num_examples', 0)}, "
+                        f"no_step_tags={result.aux.get('num_skipped_no_steps', 0)}"
+                    )
                     continue
 
                 self.accelerator.backward(result.loss)
@@ -48,9 +64,18 @@ class BASDTrainer:
                 self.optimizer.zero_grad(set_to_none=True)
 
             global_step += 1
-            if global_step % self.cfg["train"]["log_steps"] == 0:
+            if global_step == 1 or global_step % log_steps == 0:
                 rows = result.aux.get("rows", [])
                 boundary_rate = sum(1 for r in rows if r["boundary_found"]) / max(1, len(rows))
+                step_time = perf_counter() - step_start
+                self.accelerator.print(
+                    f"[train] step {global_step}/{planned_steps} "
+                    f"loss={float(result.loss.detach().item()):.6f} "
+                    f"used={result.aux.get('num_used', 0)}/{result.aux.get('num_examples', 0)} "
+                    f"no_step_tags={result.aux.get('num_skipped_no_steps', 0)} "
+                    f"boundary_rate={boundary_rate:.2%} "
+                    f"time={step_time:.1f}s"
+                )
                 self.debug_logger.log(
                     {
                         "step": global_step,
@@ -68,4 +93,6 @@ class BASDTrainer:
             out_dir = Path(self.cfg.get("output_dir", "output/train_runs/default"))
             out_dir.mkdir(parents=True, exist_ok=True)
             unwrap = self.accelerator.unwrap_model(self.model)
+            self.accelerator.print(f"[train] saving final checkpoint to {out_dir / 'final_ckpt'}")
             unwrap.save_pretrained(str(out_dir / "final_ckpt"))
+            self.accelerator.print("[train] training finished")
