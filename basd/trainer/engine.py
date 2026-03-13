@@ -52,11 +52,17 @@ class BASDTrainer:
                 result = run_train_step(batch, self.model, self.tokenizer, self.accelerator, self.cfg)
                 if result.aux.get("empty_batch", False):
                     self.optimizer.zero_grad(set_to_none=True)
+                    skipped_preview = result.aux.get("skipped_preview")
                     self.accelerator.print(
                         f"[train] skipped batch at step {global_step + 1}: "
                         f"used=0/{result.aux.get('num_examples', 0)}, "
                         f"no_step_tags={result.aux.get('num_skipped_no_steps', 0)}"
                     )
+                    if skipped_preview:
+                        self.accelerator.print(
+                            f"[train] skipped sample {skipped_preview['sample_id']} preview: "
+                            f"{skipped_preview['completion_preview']}"
+                        )
                     continue
 
                 self.accelerator.backward(result.loss)

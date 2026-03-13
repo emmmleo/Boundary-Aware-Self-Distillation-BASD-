@@ -19,7 +19,7 @@ from basd.utils.seed import set_seed
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="configs/basd_qwen3_8b.yaml")
+    parser.add_argument("--config", type=str, default="configs/basd_qwen3_4b.yaml")
     args = parser.parse_args()
 
     print(f"[main] loading config from {args.config}", flush=True)
@@ -30,6 +30,7 @@ def main():
     tokenizer = load_tokenizer(cfg)
     print(f"[main] loading model from {cfg['model']['base_model_name_or_path']}", flush=True)
     model = load_student_teacher_model(cfg)
+    print("[main] using Qwen chat template generation with enable_thinking=False", flush=True)
 
     print(f"[main] starting trainer, outputs -> {cfg.get('output_dir', 'output/train_runs/default')}", flush=True)
     trainer = BASDTrainer(model=model, tokenizer=tokenizer, cfg=cfg)

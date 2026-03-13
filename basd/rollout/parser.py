@@ -3,8 +3,10 @@ import re
 from basd.types import StepSpan
 
 
-STEP_RE = re.compile(r"<<STEP_(\d+)>>")
-FINAL_RE = re.compile(r"<<FINAL>>")
+STEP_RE = re.compile(r"<<\s*STEP[\s_:-]*(\d+)\s*>>", flags=re.IGNORECASE)
+FINAL_RE = re.compile(r"<<\s*FINAL\s*>>", flags=re.IGNORECASE)
+PLAIN_STEP_RE = re.compile(r"(^|\n)\s*Step\s*(\d+)\s*:", flags=re.IGNORECASE)
+PLAIN_FINAL_RE = re.compile(r"(^|\n)\s*(?:Final\s*Answer|Answer)\s*:", flags=re.IGNORECASE)
 
 
 def parse_steps_from_text(text: str) -> list[StepSpan]:
@@ -12,6 +14,10 @@ def parse_steps_from_text(text: str) -> list[StepSpan]:
     for m in STEP_RE.finditer(text):
         tags.append((m.start(), m.end(), int(m.group(1)), False))
     for m in FINAL_RE.finditer(text):
+        tags.append((m.start(), m.end(), -1, True))
+    for m in PLAIN_STEP_RE.finditer(text):
+        tags.append((m.start(), m.end(), int(m.group(2)), False))
+    for m in PLAIN_FINAL_RE.finditer(text):
         tags.append((m.start(), m.end(), -1, True))
     tags.sort(key=lambda x: x[0])
 

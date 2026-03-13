@@ -19,14 +19,21 @@ def run_train_step(batch_examples, model, tokenizer, accelerator, cfg):
     total_loss = None
     aux_rows = []
     skipped_no_steps = 0
+    skipped_preview = None
 
     for ex in batch_examples:
-        student_prompt = build_student_prompt(ex.question, PromptConfig(**cfg["prompt"]))
+        student_prompt = build_student_prompt(tokenizer, ex.question, PromptConfig(**cfg["prompt"]))
         completion_ids, completion_text = generate_student_rollout(model, tokenizer, student_prompt, cfg["generation"])
         step_spans = parse_steps_from_text(completion_text)
 
         if not step_spans:
             skipped_no_steps += 1
+            if skipped_preview is None:
+                preview = completion_text[:300].replace("\n", "\\n").strip()
+                skipped_preview = {
+                    "sample_id": ex.sample_id,
+                    "completion_preview": preview or "<empty completion>",
+                }
             continue
 
         token_step_ids, reasoning_mask, final_answer_mask = align_tokens_to_steps(
@@ -43,7 +50,7 @@ def run_train_step(batch_examples, model, tokenizer, accelerator, cfg):
         enable_student_adapter(model)
         student_logits = get_completion_logits(model, prompt_ids, completion_ids)
 
-        teacher_prompt = build_teacher_prompt(ex.question, ex.reference_solution)
+        teacher_prompt = build_teacher_prompt(tokenizer, ex.question, ex.reference_solution, ex.gold_answer)
         teacher_prompt_ids = tokenizer(teacher_prompt, add_special_tokens=False, return_tensors="pt")["input_ids"][0].to(completion_ids.device)
         disable_student_adapter(model)
         teacher_logits = get_completion_logits(model, teacher_prompt_ids, completion_ids)
@@ -100,5 +107,6 @@ def run_train_step(batch_examples, model, tokenizer, accelerator, cfg):
             "num_examples": len(batch_examples),
             "num_used": len(aux_rows),
             "num_skipped_no_steps": skipped_no_steps,
+            "skipped_preview": skipped_preview,
         },
     )

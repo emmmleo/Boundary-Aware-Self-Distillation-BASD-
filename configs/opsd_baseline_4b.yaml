@@ -14,8 +14,7 @@ data:
   max_samples: null
 
 prompt:
-  step_tag_format: "<<STEP_{i}>>"
-  final_tag: "<<FINAL>>"
+  max_steps: 8
 
 generation:
   max_new_tokens: 768
