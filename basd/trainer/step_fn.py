@@ -16,7 +16,7 @@ from basd.types import BoundaryResult, DistillBatchOutput
 
 
 def run_train_step(batch_examples, model, tokenizer, accelerator, cfg):
-    total_loss = torch.tensor(0.0, device=accelerator.device)
+    total_loss = None
     aux_rows = []
 
     for ex in batch_examples:
@@ -74,7 +74,7 @@ def run_train_step(batch_examples, model, tokenizer, accelerator, cfg):
             cfg=cfg["distill"],
         )
 
-        total_loss = total_loss + loss
+        total_loss = loss if total_loss is None else total_loss + loss
         aux_rows.append(
             {
                 "sample_id": ex.sample_id,
@@ -88,4 +88,6 @@ def run_train_step(batch_examples, model, tokenizer, accelerator, cfg):
 
     if aux_rows:
         total_loss = total_loss / len(aux_rows)
-    return DistillBatchOutput(loss=total_loss, aux={"rows": aux_rows})
+    else:
+        total_loss = torch.zeros((), device=accelerator.device)
+    return DistillBatchOutput(loss=total_loss, aux={"rows": aux_rows, "empty_batch": not aux_rows})

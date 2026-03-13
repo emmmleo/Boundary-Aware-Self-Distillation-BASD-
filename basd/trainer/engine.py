@@ -39,6 +39,10 @@ class BASDTrainer:
         for batch in loader:
             with self.accelerator.accumulate(self.model):
                 result = run_train_step(batch, self.model, self.tokenizer, self.accelerator, self.cfg)
+                if result.aux.get("empty_batch", False):
+                    self.optimizer.zero_grad(set_to_none=True)
+                    continue
+
                 self.accelerator.backward(result.loss)
                 self.optimizer.step()
                 self.optimizer.zero_grad(set_to_none=True)
